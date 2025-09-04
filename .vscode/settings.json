@@ -1,0 +1,9 @@
+{
+  "[solidity]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "prettier.documentSelectors": ["**/*.sol"],
+  "editor.formatOnSave": true,
+  "solidity.formatter": "prettier"
+}

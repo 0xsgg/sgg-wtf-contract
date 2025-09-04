@@ -1,0 +1,29 @@
+{
+  "name": "sgg-wtf-contract",
+  "scripts": {
+    "clean": "hardhat clean",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "coverage": "hardhat coverage",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
+    "verify": "hardhat verify",
+    "lint": "solhint 'contracts/**/*.sol'",
+    "lint:fix": "solhint 'contracts/**/*.sol' --fix",
+    "format": "prettier --write \"contracts/**/*.sol\" --plugin=prettier-plugin-solidity"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@uniswap/v3-sdk": "^3.25.2",
+    "dotenv": "^16.4.1",
+    "hardhat": "^2.26.2",
+    "prettier": "^3.6.2",
+    "prettier-plugin-solidity": "^1.4.3",
+    "solhint": "^4.1.1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0"
+  }
+}
