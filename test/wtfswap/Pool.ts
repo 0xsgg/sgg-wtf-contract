@@ -61,7 +61,7 @@ describe("Pool", function () {
         expect(await pool.read.tick()).to.equal(TickMath.getTickAtSqrtRatio(sqrtPriceX96));
     })
 
-
+    // 测试 mint、burn 和 collect 方法
     it('mint & burn & collect', async function() {
         const { factory, token0, token1, tickLower, tickUpper, fee, sqrtPriceX96, pool, publicClient } = await loadFixture(deployFixture);
         const testLP = await hre.viem.deployContract('TestLP');
@@ -152,5 +152,97 @@ describe("Pool", function () {
 
     })
     
+    // 测试 swap 方法
+    it('swap', async function() {
+        const { factory, token0, token1, tickLower, tickUpper, fee, sqrtPriceX96, pool, publicClient } = await loadFixture(deployFixture);
+
+        const testLP = await hre.viem.deployContract('TestLP');
+        
+        const initBalanceValue = BigInt(100000000000n * 10n ** 18n); // 初始给 LP 铸币 100000000000 个 token0 和 token1
+        
+        // 给 testLP 合约铸币
+        await token0.write.mint([testLP.address, initBalanceValue]);
+        await token1.write.mint([testLP.address, initBalanceValue]);
+
+        // mint 1000000000000000000000000000 份流动性， 多一些，确保交易可以完全成交
+        const liquidityDelto = 1000000000000000000000000000n;
+        await testLP.write.mint([
+            testLP.address,
+            liquidityDelto,
+            pool.address,
+            token0.address,
+            token1.address,
+        ])
+
+        const lpToken0 = await token0.read.balanceOf([testLP.address]);
+        expect(lpToken0).to.equal(99995000161384542080378486215n)  // 差值（转入池子的数量）：约 4999.84 * 10^18
+        
+        const lpToken1 = await token1.read.balanceOf([testLP.address]);
+        expect(lpToken1).to.equal(1000000000n * 10n ** 18n)  // 几乎没有 token1 被转入池子
+
+        
+        // 部署 TestSwap 合约，完成 swap 合约交易
+        const testSwap = await hre.viem.deployContract('TestSwap');
+        const minPrice = 1000;
+        const minSqrtPriceX96: bigint = BigInt(encodeSqrtRatioX96(minPrice, 1).toString());
+
+        // 先给 testSwap 合约铸币一些 token0
+        await token0.write.mint([testSwap.address, 300n * 10n ** 18n]);
+        
+        expect(await token0.read.balanceOf([testSwap.address])).to.equal(300n * 10n ** 18n);
+        expect(await token1.read.balanceOf([testSwap.address])).to.equal(0n);
+
+         // 进行 swap 交易，交换 100 个 token0，期望至少获得 100 * 10000 个 token1
+        const result = await testSwap.simulate.testSwap([
+            testSwap.address,
+            100n * 10n ** 18n,
+            minSqrtPriceX96,
+            pool.address,
+            token0.address,
+            token1.address,
+        ])
+
+        expect(result.result[0]).to.equal(100000000000000000000n);  // 需要 100个 token0
+        expect(result.result[1]).to.equal(-996990060009101709255958n) // 大概需要 100 * 10000 个 token1
+
+       
+        await testSwap.write.testSwap([
+            testSwap.address,
+            100n * 10n ** 18n,
+            minSqrtPriceX96,
+            pool.address,
+            token0.address,
+            token1.address, 
+        ])
+
+        const costToken0 = 300n * 10n ** 18n - await token0.read.balanceOf([testSwap.address]);
+        const receiveToken1 = await token1.read.balanceOf([testSwap.address]);
+        const newPrice = await pool.read.sqrtPriceX96() as bigint;
+        const liquidity = await pool.read.liquidity();
+        
+        // 用户消耗了大约 100 个 token0
+        expect(costToken0).to.equal(100n * 10n ** 18n);
+        // 获得了大约 100 * 10000 个 token1
+        expect(receiveToken1).to.equal(996990060009101709255958n);
+        // 价格也下降了，计算价格差
+        const initialPrice = BigInt(sqrtPriceX96.toString());
+        expect(initialPrice - newPrice).to.equal(78989690499507264493336319n);
+        // 流动性没有变化
+        expect(liquidity).to.equal(liquidityDelto);
+    
+        // 删除流动性
+        await testLP.write.burn([liquidityDelto, pool.address])
+        // 断言当前 token 的数量
+        expect(await token0.read.balanceOf([testLP.address])).to.equal(99995000161384542080378486215n)  // testLP 剩余的 token0 数量
+        // 删除流动性后，断言池子的流动性为 0n
+        expect(await pool.read.liquidity()).to.equal(0n);
+
+        // 提取 token 代币
+        await testLP.write.collect([testLP.address, pool.address]);
+        // 判断 token 是否返回给 testLP，并且大于原来的数量，因为收到了手续费，并且有交易换入了 token0
+        // 初始的 token0 是 const initBalanceValue = 100000000000n * 10n ** 18n;
+        expect(await token0.read.balanceOf([testLP.address])).to.equal(100000000099999999999999999998n)  // testLP 剩余的 token0 数量
+
+    }) 
 
 })
