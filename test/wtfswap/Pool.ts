@@ -113,6 +113,8 @@ describe("Pool", function () {
 
         expect(await pool.read.liquidity()).to.equal(20040000n);
 
+
+        // create new LP 合约，继续 mint 3000 份流动性
         const testLP2 = await hre.viem.deployContract('TestLP');
         await token0.write.mint([testLP2.address, initBalanceValue]);
         await token1.write.mint([testLP2.address, initBalanceValue]);
@@ -124,11 +126,28 @@ describe("Pool", function () {
             token0.address,
             token1.address,
         ])
-
+        // 判断池子里面的 token0 是否等于 LP1 和 LP2 减少的 token0 之和
         const totalToken0InPool = initBalanceValue - await token0.read.balanceOf([testLP.address]) + 
         initBalanceValue - await token0.read.balanceOf([testLP2.address]);
+        expect(await token0.read.balanceOf([pool.address])).to.equal(totalToken0InPool);
 
-        expect(token0.read.balanceOf([pool.address])).to.equal(totalToken0InPool);
+
+        // burn all Liquidity for testLP
+        await testLP.write.burn([
+            20040000n,
+            pool.address,
+        ])
+        expect(await pool.read.liquidity()).to.equal(3000n);
+
+        // 判断池子里面的 token0 是否等于 LP1 和 LP2 减少的 token0 之和，burn 只是把流动性返回给 LP，不会把 token 返回给 LP
+        expect(await token0.read.balanceOf([pool.address])).to.equal(totalToken0InPool)
+
+        // collect, all balance back to testLP
+        await testLP.write.collect([testLP.address, pool.address]);
+
+        // 由于取整问题，提取流动性之后获得 token 可能会少 1 wei，这里允许有 10 wei 的误差
+        expect(Number(initBalanceValue - await token0.read.balanceOf([testLP.address]))).to.lessThan(10)
+        expect(Number(initBalanceValue - await token1.read.balanceOf([testLP.address]))).to.lessThan(10)
 
 
     })
