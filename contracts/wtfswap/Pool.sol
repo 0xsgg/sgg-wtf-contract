@@ -151,6 +151,7 @@ contract Pool is IPool {
         // 更新提取手续费的记录，同步到当前最新的 feeGrowthGlobal0X128，代表都提取完了
         position.feeGrowthInside0LastX128 = feeGrowthGlobal0X128;
         position.feeGrowthInside1LastX128 = feeGrowthGlobal1X128;
+
         // 把可以提取的手续费记录到 tokensOwed0 和 tokensOwed1 中
         // LP 可以通过 collect 来最终提取到用户自己账户上
         if (tokensOwed0 > 0 || tokensOwed1 > 0) {
@@ -208,6 +209,7 @@ contract Pool is IPool {
         uint256 balance1Before;
         if (amount0 > 0) balance0Before = balance0();
         if (amount1 > 0) balance1Before = balance1();
+
         // 回调 mintCallback
         IMintCallback(msg.sender).mintCallback(amount0, amount1, data);
 
@@ -217,34 +219,6 @@ contract Pool is IPool {
             require(balance1Before.add(amount1) <= balance1(), "M1");
 
         emit Mint(msg.sender, recipient, amount, amount0, amount1);
-    }
-
-    function collect(
-        address recipient,
-        uint128 amount0Requested,
-        uint128 amount1Requested
-    ) external override returns (uint128 amount0, uint128 amount1) {
-        // 获取当前用户的 position
-        Position storage position = positions[msg.sender];
-
-        // 把钱退给用户 recipient
-        amount0 = amount0Requested > position.tokensOwed0
-            ? position.tokensOwed0
-            : amount0Requested;
-        amount1 = amount1Requested > position.tokensOwed1
-            ? position.tokensOwed1
-            : amount1Requested;
-
-        if (amount0 > 0) {
-            position.tokensOwed0 -= amount0;
-            TransferHelper.safeTransfer(token0, recipient, amount0);
-        }
-        if (amount1 > 0) {
-            position.tokensOwed1 -= amount1;
-            TransferHelper.safeTransfer(token1, recipient, amount1);
-        }
-
-        emit Collect(msg.sender, recipient, amount0, amount1);
     }
 
     function burn(
@@ -277,6 +251,34 @@ contract Pool is IPool {
         }
 
         emit Burn(msg.sender, amount, amount0, amount1);
+    }
+
+    function collect(
+        address recipient,
+        uint128 amount0Requested,
+        uint128 amount1Requested
+    ) external override returns (uint128 amount0, uint128 amount1) {
+        // 获取当前用户的 position
+        Position storage position = positions[msg.sender];
+
+        // 把钱退给用户 recipient
+        amount0 = amount0Requested > position.tokensOwed0
+            ? position.tokensOwed0
+            : amount0Requested;
+        amount1 = amount1Requested > position.tokensOwed1
+            ? position.tokensOwed1
+            : amount1Requested;
+
+        if (amount0 > 0) {
+            position.tokensOwed0 -= amount0;
+            TransferHelper.safeTransfer(token0, recipient, amount0);
+        }
+        if (amount1 > 0) {
+            position.tokensOwed1 -= amount1;
+            TransferHelper.safeTransfer(token1, recipient, amount1);
+        }
+
+        emit Collect(msg.sender, recipient, amount0, amount1);
     }
 
     // 交易中需要临时存储的变量
@@ -341,6 +343,9 @@ contract Pool is IPool {
             : sqrtPriceX96Upper;
 
         // 计算交易的具体数值
+        // 这个要求是说，如果是用 token0 换 token1（zeroForOne 为 true），
+        // 那么价格限制 sqrtPriceLimitX96 必须低于当前价格 sqrtPriceX96，但是不能低于最低价格 MIN_SQRT_PRICE。
+        // 反之，如果是用 token1 换 token0（zeroForOne 为 false），那么价格限制 sqrtPriceLimitX96 必须高于当前价格 sqrtPriceX96，但是不能高于最高价格 MAX_SQRT_PRICE。
         (
             state.sqrtPriceX96,
             state.amountIn,
